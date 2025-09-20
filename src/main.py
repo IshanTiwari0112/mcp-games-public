@@ -387,7 +387,7 @@ async def main():
         return
 
     # Determine transport method
-    port = args.port or os.getenv("PORT")
+    port = args.port or os.getenv("PORT") or "8080"  # Default to 8080 for deployment
 
     if port and not args.stdio:
         # HTTP transport (for Dedalus deployment)

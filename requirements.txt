@@ -1,0 +1,11 @@
+mcp>=1.0.0
+fastmcp>=2.0.0
+pydantic>=2.0.0
+gymnasium[classic_control]>=1.0.0
+numpy>=1.24.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+websockets>=11.0
+pillow>=10.0.0
+python-dotenv>=1.0.0
+ale-py>=0.8.0

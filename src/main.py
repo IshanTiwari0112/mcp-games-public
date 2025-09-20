@@ -10,8 +10,16 @@ from typing import Any, Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
-from .games.registry import GameRegistry
-from .games.types import GameAction
+try:
+    from .games.registry import GameRegistry
+    try:
+        from .games.types import GameAction
+    except ImportError:
+        from games.types import GameAction
+except ImportError:
+    # Fallback for when module is imported directly
+    from games.registry import GameRegistry
+    from games.types import GameAction
 
 # Initialize FastMCP server
 mcp = FastMCP("gym-mcp")
@@ -387,7 +395,10 @@ def blackjack_hit(game_id: str, player: str) -> str:
     if not game or game.type != "Blackjack-v1":
         return f"Blackjack game {game_id} not found"
 
-    from .games.types import GameAction
+    try:
+        from .games.types import GameAction
+    except ImportError:
+        from games.types import GameAction
     action = GameAction(
         player=player,
         type="gym_step",
@@ -416,7 +427,10 @@ def blackjack_stand(game_id: str, player: str) -> str:
     if not game or game.type != "Blackjack-v1":
         return f"Blackjack game {game_id} not found"
 
-    from .games.types import GameAction
+    try:
+        from .games.types import GameAction
+    except ImportError:
+        from games.types import GameAction
     action = GameAction(
         player=player,
         type="gym_step",

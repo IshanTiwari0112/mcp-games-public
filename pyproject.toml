@@ -37,7 +37,8 @@ gym = [
     "numpy>=1.24.0",
 ]
 
-# Entry point for deployment
+[project.scripts]
+gym-mcp = "src.main:main"
 
 [tool.black]
 line-length = 88

@@ -33,7 +33,12 @@ class GymnasiumGame(Game):
     def _create_env(self):
         """Create the Gymnasium environment"""
         if self.env is None:
-            self.env = gym.make(self.env_name)
+            # Set render mode to 'rgb_array' for visual environments
+            try:
+                self.env = gym.make(self.env_name, render_mode='rgb_array')
+            except Exception:
+                # Fallback to no render mode if rgb_array is not supported
+                self.env = gym.make(self.env_name)
 
     def start(self, players: List[str]) -> GameResult:
         """Start the environment - single player for most Gym environments"""

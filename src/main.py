@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import os
 import sys
+import base64
+import io
 from typing import Any, Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
@@ -16,6 +18,86 @@ mcp = FastMCP("gym-mcp")
 
 # Global registry instance
 registry = GameRegistry()
+
+
+def get_game_frame(game_id: str) -> Optional[str]:
+    """Get the current visual frame of a game as base64 encoded image"""
+    game = registry.get_game(game_id)
+    if not game:
+        return None
+
+    try:
+        # Try to get the environment's rendered frame
+        if hasattr(game, 'env') and game.env is not None:
+            # First check if we can render
+            try:
+                frame = game.env.render()
+                if frame is not None:
+                    import numpy as np
+                    from PIL import Image
+
+                    # Convert frame to PIL Image if it's a numpy array
+                    if isinstance(frame, np.ndarray):
+                        if frame.dtype != np.uint8:
+                            frame = (frame * 255).astype(np.uint8) if frame.max() <= 1.0 else frame.astype(np.uint8)
+
+                        img = Image.fromarray(frame)
+
+                        # Convert to base64
+                        buffer = io.BytesIO()
+                        img.save(buffer, format='PNG')
+                        img_str = base64.b64encode(buffer.getvalue()).decode()
+                        return f"data:image/png;base64,{img_str}"
+            except Exception as render_error:
+                # Try alternative render mode
+                try:
+                    # Re-create environment with correct render mode if needed
+                    import gymnasium as gym
+                    import numpy as np
+                    from PIL import Image
+
+                    env_name = getattr(game, 'env_name', game.type)
+
+                    # Create a temporary environment with correct render mode
+                    temp_env = gym.make(env_name, render_mode='rgb_array')
+
+                    # Reset to initial state
+                    temp_env.reset()
+
+                    frame = temp_env.render()
+                    temp_env.close()
+
+                    if frame is not None and isinstance(frame, np.ndarray):
+                        if frame.dtype != np.uint8:
+                            frame = (frame * 255).astype(np.uint8) if frame.max() <= 1.0 else frame.astype(np.uint8)
+
+                        img = Image.fromarray(frame)
+                        buffer = io.BytesIO()
+                        img.save(buffer, format='PNG')
+                        img_str = base64.b64encode(buffer.getvalue()).decode()
+                        return f"data:image/png;base64,{img_str}"
+                except Exception:
+                    pass  # Silently fail fallback
+
+        # Fallback: try to get frame from observation if it's an image
+        state = game.get_state()
+        if state and state.state and 'observation' in state.state:
+            obs = state.state['observation']
+            if isinstance(obs, dict) and obs.get('type') == 'image':
+                return f"data:image/png;base64,{obs['data']}"
+
+    except Exception as e:
+        print(f"Error getting frame for game {game_id}: {e}", file=sys.stderr)
+
+    return None
+
+
+def format_response_with_frame(message: str, game_id: str) -> str:
+    """Format response to include visual frame if available"""
+    frame = get_game_frame(game_id)
+    if frame:
+        return f"{message}\n\n🎮 Current Frame:\n![Game Frame]({frame})"
+    return message
 
 
 @mcp.tool()
@@ -60,7 +142,8 @@ def make_move(game_id: str, action_type: str, payload: Dict[str, Any], player: s
     result = game.make_move(action)
 
     if result.success:
-        return f"Move successful: {result.new_state.model_dump()}"
+        base_msg = f"Move successful: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Move failed: {result.error}"
 
@@ -73,7 +156,8 @@ def get_game_state(game_id: str) -> str:
         return f"Game {game_id} not found"
 
     state = game.get_state()
-    return f"Game state: {state.model_dump()}"
+    base_msg = f"Game state: {state.model_dump()}"
+    return format_response_with_frame(base_msg, game_id)
 
 
 @mcp.tool()
@@ -122,7 +206,8 @@ def gym_step(game_id: str, action: Any, player: str) -> str:
     result = game.make_move(action_obj)
 
     if result.success:
-        return f"Step successful: {result.new_state.model_dump()}"
+        base_msg = f"Step successful: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Step failed: {result.error}"
 
@@ -153,7 +238,8 @@ def cartpole_move_left(game_id: str, player: str) -> str:
     result = game.make_move(action_obj)
 
     if result.success:
-        return f"Moved left: {result.new_state.model_dump()}"
+        base_msg = f"Moved left: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Move failed: {result.error}"
 
@@ -169,7 +255,8 @@ def cartpole_move_right(game_id: str, player: str) -> str:
     result = game.make_move(action_obj)
 
     if result.success:
-        return f"Moved right: {result.new_state.model_dump()}"
+        base_msg = f"Moved right: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Move failed: {result.error}"
 
@@ -235,7 +322,8 @@ def breakout_noop(game_id: str, player: str) -> str:
     result = game.make_move(action_obj)
 
     if result.success:
-        return f"No-op: {result.new_state.model_dump()}"
+        base_msg = f"No-op: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Action failed: {result.error}"
 
@@ -251,7 +339,8 @@ def breakout_fire(game_id: str, player: str) -> str:
     result = game.make_move(action_obj)
 
     if result.success:
-        return f"Fired: {result.new_state.model_dump()}"
+        base_msg = f"Fired: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Action failed: {result.error}"
 
@@ -267,7 +356,8 @@ def breakout_right(game_id: str, player: str) -> str:
     result = game.make_move(action_obj)
 
     if result.success:
-        return f"Moved right: {result.new_state.model_dump()}"
+        base_msg = f"Moved right: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Action failed: {result.error}"
 
@@ -283,7 +373,8 @@ def breakout_left(game_id: str, player: str) -> str:
     result = game.make_move(action_obj)
 
     if result.success:
-        return f"Moved left: {result.new_state.model_dump()}"
+        base_msg = f"Moved left: {result.new_state.model_dump()}"
+        return format_response_with_frame(base_msg, game_id)
     else:
         return f"Action failed: {result.error}"
 
@@ -296,7 +387,7 @@ def blackjack_hit(game_id: str, player: str) -> str:
     if not game or game.type != "Blackjack-v1":
         return f"Blackjack game {game_id} not found"
 
-    from games.types import GameAction
+    from .games.types import GameAction
     action = GameAction(
         player=player,
         type="gym_step",
@@ -325,7 +416,7 @@ def blackjack_stand(game_id: str, player: str) -> str:
     if not game or game.type != "Blackjack-v1":
         return f"Blackjack game {game_id} not found"
 
-    from games.types import GameAction
+    from .games.types import GameAction
     action = GameAction(
         player=player,
         type="gym_step",

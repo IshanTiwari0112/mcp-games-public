@@ -31,5 +31,25 @@ async def main():
     await server_main()
 
 
+# ASGI app for uvicorn deployment
+def create_app():
+    """Create ASGI app for deployment"""
+    # Setup path
+    src_path = Path(__file__).parent / "src"
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+
+    # Change to project directory
+    os.chdir(Path(__file__).parent)
+
+    # Import and return the HTTP app
+    from src.main import mcp
+    return mcp.streamable_http_app()
+
+
+# Export app for uvicorn
+app = create_app()
+
+
 if __name__ == "__main__":
     asyncio.run(main())

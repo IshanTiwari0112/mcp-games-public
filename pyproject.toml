@@ -37,7 +37,7 @@ gym = [
     "numpy>=1.24.0",
 ]
 
-# No scripts section - Dedalus expects main.py as entry point
+# Entry point for deployment
 
 [tool.black]
 line-length = 88

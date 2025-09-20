@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gym-mcp"
+version = "0.1.0"
+description = "MCP server for AI gaming - wraps games as tools including Gymnasium environments"
+authors = [{name = "Gym MCP", email = "gymmcp@example.com"}]
+dependencies = [
+    "dedalus-labs>=1.0.0",
+    "mcp>=1.0.0",
+    "fastmcp>=2.0.0",
+    "pydantic>=2.0.0",
+    "gymnasium[classic_control]>=1.0.0",
+    "numpy>=1.24.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "websockets>=11.0",
+    "pillow>=10.0.0",
+    "python-dotenv>=1.0.0",
+]
+requires-python = ">=3.10"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "mypy>=1.0.0",
+]
+gym = [
+    "gymnasium[classic_control,atari]>=1.0.0",
+    "numpy>=1.24.0",
+]
+
+# No scripts section - Dedalus expects main.py as entry point
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

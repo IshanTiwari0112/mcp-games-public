@@ -472,6 +472,300 @@ def blackjack_status(game_id: str) -> str:
     return status
 
 
+# FrozenLake-specific tools
+@mcp.tool()
+def frozen_lake_move_up(game_id: str, player: str) -> str:
+    """Move up on the frozen lake grid"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "FrozenLake-v1":
+        return f"FrozenLake game {game_id} not found"
+
+    action_obj = GameAction(type="gym_step", payload={"action": 3}, player=player)  # 3 = Up
+    result = game.make_move(action_obj)
+
+    if result.success:
+        meta = result.new_state.metadata
+        response = f"Moved up! {meta.get('text_description', 'Position updated')}"
+        return response
+    else:
+        return f"Move failed: {result.error}"
+
+
+@mcp.tool()
+def frozen_lake_move_down(game_id: str, player: str) -> str:
+    """Move down on the frozen lake grid"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "FrozenLake-v1":
+        return f"FrozenLake game {game_id} not found"
+
+    action_obj = GameAction(type="gym_step", payload={"action": 1}, player=player)  # 1 = Down
+    result = game.make_move(action_obj)
+
+    if result.success:
+        meta = result.new_state.metadata
+        response = f"Moved down! {meta.get('text_description', 'Position updated')}"
+        return response
+    else:
+        return f"Move failed: {result.error}"
+
+
+@mcp.tool()
+def frozen_lake_move_left(game_id: str, player: str) -> str:
+    """Move left on the frozen lake grid"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "FrozenLake-v1":
+        return f"FrozenLake game {game_id} not found"
+
+    action_obj = GameAction(type="gym_step", payload={"action": 0}, player=player)  # 0 = Left
+    result = game.make_move(action_obj)
+
+    if result.success:
+        meta = result.new_state.metadata
+        response = f"Moved left! {meta.get('text_description', 'Position updated')}"
+        return response
+    else:
+        return f"Move failed: {result.error}"
+
+
+@mcp.tool()
+def frozen_lake_move_right(game_id: str, player: str) -> str:
+    """Move right on the frozen lake grid"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "FrozenLake-v1":
+        return f"FrozenLake game {game_id} not found"
+
+    action_obj = GameAction(type="gym_step", payload={"action": 2}, player=player)  # 2 = Right
+    result = game.make_move(action_obj)
+
+    if result.success:
+        meta = result.new_state.metadata
+        response = f"Moved right! {meta.get('text_description', 'Position updated')}"
+        return response
+    else:
+        return f"Move failed: {result.error}"
+
+
+@mcp.tool()
+def frozen_lake_status(game_id: str) -> str:
+    """Get current FrozenLake game status with detailed description"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "FrozenLake-v1":
+        return f"FrozenLake game {game_id} not found"
+
+    state = game.get_state()
+    meta = state.metadata
+
+    status = f"🧊 Frozen Lake Status:\n"
+    status += meta.get('text_description', 'No description available') + "\n"
+    status += f"Current position: {meta.get('position', 'Unknown')}\n"
+    status += f"Game status: {state.status.value}\n"
+    status += f"Steps taken: {state.state.get('episode_steps', 0)}\n"
+    status += f"Total reward: {state.state.get('episode_reward', 0)}\n"
+
+    if state.status.value == "completed":
+        status += f"\n{meta.get('result', 'Game ended')}"
+
+    return status
+
+
+# Chess-specific tools
+@mcp.tool()
+def chess_move(game_id: str, move: str, player: str) -> str:
+    """Make a chess move using UCI notation"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "chess":
+        return f"Chess game {game_id} not found"
+
+    action_obj = GameAction(type="chess_move", payload={"move": move}, player=player)
+    result = game.make_move(action_obj)
+
+    if result.success:
+        meta = result.new_state.metadata
+        response = f"Move {move} played!\n\n{meta.get('game_description', 'Move completed')}"
+        return response
+    else:
+        return f"Move failed: {result.error}"
+
+
+@mcp.tool()
+def chess_get_legal_moves(game_id: str) -> str:
+    """Get all legal moves in the current chess position"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "chess":
+        return f"Chess game {game_id} not found"
+
+    actions = game.get_available_actions()
+    if not actions:
+        return "No legal moves available (game may be over)"
+
+    response = f"📋 Legal moves ({len(actions)} total):\n\n"
+    
+    # Group moves by piece type for better readability
+    move_groups = {}
+    for action in actions:
+        piece = action['description'].split()[0]
+        if piece not in move_groups:
+            move_groups[piece] = []
+        move_groups[piece].append(f"{action['move']} ({action['algebraic']})")
+    
+    for piece, moves in move_groups.items():
+        response += f"{piece} moves: {', '.join(moves[:5])}"
+        if len(moves) > 5:
+            response += f" (and {len(moves) - 5} more)"
+        response += "\n"
+    
+    return response
+
+
+@mcp.tool()
+def chess_get_board(game_id: str) -> str:
+    """Get current board position with detailed information"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "chess":
+        return f"Chess game {game_id} not found"
+
+    state = game.get_state()
+    meta = state.metadata
+    
+    response = meta.get('game_description', 'No board information available')
+    return response
+
+
+@mcp.tool()
+def chess_analyze_position(game_id: str) -> str:
+    """Get strategic analysis of the current chess position"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "chess":
+        return f"Chess game {game_id} not found"
+
+    state = game.get_state()
+    game_state = state.state
+    
+    analysis = f"🔍 Chess Position Analysis:\n\n"
+    analysis += f"📊 Material count: {game_state.get('move_count', 0)} moves played\n"
+    analysis += f"⚡ Current turn: {game_state.get('turn', 'unknown').title()}\n"
+    
+    if game_state.get('check'):
+        analysis += f"⚠️ King in check - must move out of check!\n"
+    
+    # Count legal moves as an indicator of position strength
+    legal_moves = game_state.get('legal_moves', [])
+    analysis += f"🎯 Mobility: {len(legal_moves)} legal moves available\n"
+    
+    if len(legal_moves) < 5:
+        analysis += f"💡 Limited options - position may be critical\n"
+    elif len(legal_moves) > 25:
+        analysis += f"💡 Many options - position is very open\n"
+    
+    # Basic position assessment
+    if game_state.get('move_count', 0) < 10:
+        analysis += f"📖 Opening phase - focus on development and center control\n"
+    elif game_state.get('move_count', 0) < 40:
+        analysis += f"⚔️ Middle game - look for tactical opportunities\n"
+    else:
+        analysis += f"👑 Endgame - king activity and pawn promotion important\n"
+    
+    return analysis
+
+
+# PettingZoo Chess-specific tools
+@mcp.tool()
+def chess_move_pz(game_id: str, action: int, player: str) -> str:
+    """Make a chess move in PettingZoo chess using action integer"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "chess_v6":
+        return f"PettingZoo Chess game {game_id} not found"
+
+    action_obj = GameAction(type="pz_step", payload={"action": action}, player=player)
+    result = game.make_move(action_obj)
+
+    if result.success:
+        meta = result.new_state.metadata
+        response = f"Chess move {action} played!\n\n{meta.get('text_description', 'Move completed')}"
+        move_result = meta.get('move_result')
+        if move_result:
+            response += f"\n{move_result}"
+        return response
+    else:
+        return f"Move failed: {result.error}"
+
+
+@mcp.tool()
+def chess_status_pz(game_id: str) -> str:
+    """Get current PettingZoo chess game status"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "chess_v6":
+        return f"PettingZoo Chess game {game_id} not found"
+
+    state = game.get_state()
+    meta = state.metadata
+    
+    status = meta.get('text_description', 'No status available')
+    
+    # Add technical details
+    game_state = state.state
+    if game_state:
+        status += f"\n\n🔧 Technical Details:\n"
+        status += f"Action spaces: {game_state.get('action_space', {})}\n"
+        status += f"Current agent: {game_state.get('current_agent', 'Unknown')}\n"
+        
+        # Show available actions count
+        actions = game.get_available_actions()
+        if actions:
+            status += f"Available actions: {len(actions)} possible moves"
+    
+    return status
+
+
+# Connect Four-specific tools
+@mcp.tool()
+def connect4_drop(game_id: str, column: int, player: str) -> str:
+    """Drop a piece in Connect Four"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "connect_four_v3":
+        return f"Connect Four game {game_id} not found"
+
+    action_obj = GameAction(type="pz_step", payload={"action": column}, player=player)
+    result = game.make_move(action_obj)
+
+    if result.success:
+        meta = result.new_state.metadata
+        response = f"Piece dropped in column {column}!\n\n{meta.get('text_description', 'Move completed')}"
+        move_result = meta.get('move_result')
+        if move_result:
+            response += f"\n{move_result}"
+        return response
+    else:
+        return f"Move failed: {result.error}"
+
+
+@mcp.tool()
+def connect4_status(game_id: str) -> str:
+    """Get current Connect Four game status"""
+    game = registry.get_game(game_id)
+    if not game or game.type != "connect_four_v3":
+        return f"Connect Four game {game_id} not found"
+
+    state = game.get_state()
+    meta = state.metadata
+    
+    status = meta.get('text_description', 'No status available')
+    
+    # Add technical details
+    game_state = state.state
+    if game_state:
+        status += f"\n\n🔧 Technical Details:\n"
+        status += f"Current agent: {game_state.get('current_agent', 'Unknown')}\n"
+        
+        # Show available actions
+        actions = game.get_available_actions()
+        if actions:
+            available_columns = [str(a['value']) for a in actions if a['type'] == 'discrete']
+            status += f"Available columns: {', '.join(available_columns)}"
+    
+    return status
+
+
 async def main():
     """Main entry point with HTTP and STDIO transport support"""
     load_dotenv()

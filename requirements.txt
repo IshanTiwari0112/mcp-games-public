@@ -9,3 +9,6 @@ websockets>=11.0
 pillow>=10.0.0
 python-dotenv>=1.0.0
 ale-py>=0.8.0
+python-chess>=1.999
+pettingzoo>=1.24.0
+chess>=1.10.0

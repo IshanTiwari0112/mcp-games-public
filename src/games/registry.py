@@ -9,6 +9,10 @@ from .cartpole import CartPole
 from .breakout import AtariBreakout
 from .mountain_car import MountainCar
 from .blackjack import Blackjack
+from .frozen_lake import FrozenLake
+from .chess_game import ChessGame
+from .pettingzoo_chess import PettingZooChess
+from .connect_four import ConnectFour
 
 
 class GameRegistry:
@@ -21,6 +25,21 @@ class GameRegistry:
         """Register built-in games"""
         # Custom games
         self.register_game_type(TicTacToe)
+        
+        # Traditional board games
+        try:
+            self.register_game_type(ChessGame)
+        except ImportError:
+            # python-chess not available, skip
+            pass
+            
+        # PettingZoo games
+        try:
+            self.register_game_type(PettingZooChess)
+            self.register_game_type(ConnectFour)
+        except ImportError:
+            # PettingZoo not available, skip
+            pass
 
         # Gymnasium environments
         try:
@@ -28,6 +47,7 @@ class GameRegistry:
             self.register_game_type(MountainCar)
             self.register_game_type(AtariBreakout)
             self.register_game_type(Blackjack)
+            self.register_game_type(FrozenLake)
         except ImportError:
             # Gymnasium not available, skip
             pass

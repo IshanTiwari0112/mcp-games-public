@@ -42,21 +42,18 @@ class PettingZooGame(Game):
             
         if self.env is None:
             try:
-                # Import the specific environment
-                if "classic" in self.env_name:
-                    from pettingzoo.classic import chess_v6, connect_four_v3, go_v5, tictactoe_v3
-                    env_map = {
-                        "chess_v6": chess_v6,
-                        "connect_four_v3": connect_four_v3, 
-                        "go_v5": go_v5,
-                        "tictactoe_v3": tictactoe_v3
-                    }
-                    if self.env_name in env_map:
-                        self.env = env_map[self.env_name].env(**self.env_kwargs)
-                    else:
-                        raise ValueError(f"Unknown classic environment: {self.env_name}")
+                # Import classic environments by default
+                from pettingzoo.classic import chess_v6, connect_four_v3, go_v5, tictactoe_v3
+                env_map = {
+                    "chess_v6": chess_v6,
+                    "connect_four_v3": connect_four_v3, 
+                    "go_v5": go_v5,
+                    "tictactoe_v3": tictactoe_v3
+                }
+                if self.env_name in env_map:
+                    self.env = env_map[self.env_name].env(**self.env_kwargs)
                 else:
-                    raise ValueError(f"Environment category not supported: {self.env_name}")
+                    raise ValueError(f"Unknown PettingZoo environment: {self.env_name}")
                 
                 # Reset first to initialize agents
                 self.env.reset()
@@ -416,6 +413,220 @@ class PettingZooGame(Game):
     def __del__(self):
         """Cleanup on deletion"""
         self.close()
+
+    def _render_game_as_svg(self) -> Optional[str]:
+        """Universal game renderer - converts observations to SVG artifacts"""
+        try:
+            current_obs = self._get_current_observation()
+            if current_obs is None:
+                return None
+                
+            # Auto-detect observation type and render accordingly
+            if isinstance(current_obs, np.ndarray):
+                if len(current_obs.shape) == 2:
+                    return self._render_grid_game(current_obs)
+                elif len(current_obs.shape) == 3:
+                    # Check if it's a board game with channels (like Connect4)
+                    if self.type in ["connect_four_v3", "chess_v6", "tictactoe_v3"]:
+                        return self._render_board_game_3d(current_obs)
+                    else:
+                        # It's an image/visual game
+                        return self._render_image_game(current_obs)
+            elif isinstance(current_obs, dict):
+                return self._render_dict_game(current_obs)
+            
+            # Fallback - no visual rendering available
+            return None
+            
+        except Exception as e:
+            print(f"Rendering error: {e}")
+            return None
+
+    def _get_current_observation(self):
+        """Get current observation for rendering"""
+        if not self.state.current_player:
+            return None
+            
+        observations = self.state.state.get("observations", {})
+        if self.state.current_player in observations:
+            obs_data = observations[self.state.current_player]
+            
+            # Handle PettingZoo observation format
+            if isinstance(obs_data, dict):
+                # Check if it's a nested observation dict (common in PettingZoo)
+                if "observation" in obs_data and isinstance(obs_data["observation"], dict):
+                    inner_obs = obs_data["observation"]
+                    if inner_obs.get("type") == "array":
+                        return np.array(inner_obs["data"]).reshape(inner_obs["shape"])
+                    elif inner_obs.get("type") == "image":
+                        img_data = base64.b64decode(inner_obs["data"])
+                        return np.frombuffer(img_data, dtype=np.uint8).reshape(inner_obs["shape"])
+                
+                # Handle direct serialized observations
+                elif obs_data.get("type") == "array":
+                    return np.array(obs_data["data"]).reshape(obs_data["shape"])
+                elif obs_data.get("type") == "image":
+                    img_data = base64.b64decode(obs_data["data"])
+                    return np.frombuffer(img_data, dtype=np.uint8).reshape(obs_data["shape"])
+            
+            return obs_data
+        return None
+
+    def _render_grid_game(self, obs) -> str:
+        """Render 2D grid games like Connect4, Chess, Go"""
+        if len(obs.shape) != 2:
+            return None
+            
+        height, width = obs.shape
+        cell_size = 40
+        config = self._get_game_rendering_config()
+        
+        svg_width = width * cell_size
+        svg_height = height * cell_size
+        
+        svg = f'''<svg width="{svg_width}" height="{svg_height}" xmlns="http://www.w3.org/2000/svg" style="border: 2px solid #333;">
+<defs>
+    <style>
+        .cell {{ stroke: #333; stroke-width: 1; }}
+        .piece {{ font-size: 24px; text-anchor: middle; dominant-baseline: central; }}
+        .player1 {{ fill: {config.get("colors", {}).get(1, "#ff0000")}; }}
+        .player2 {{ fill: {config.get("colors", {}).get(2, "#ffff00")}; }}
+        .empty {{ fill: {config.get("colors", {}).get(0, "#ffffff")}; }}
+    </style>
+</defs>'''
+        
+        # Draw grid
+        for i in range(height):
+            for j in range(width):
+                x, y = j * cell_size, i * cell_size
+                cell_value = obs[i, j]
+                
+                # Determine cell class
+                if cell_value == 0:
+                    cell_class = "empty"
+                elif cell_value == 1:
+                    cell_class = "player1"
+                elif cell_value == 2:
+                    cell_class = "player2"
+                else:
+                    cell_class = "empty"
+                
+                # Draw cell background
+                svg += f'\n  <rect x="{x}" y="{y}" width="{cell_size}" height="{cell_size}" class="cell {cell_class}"/>'
+                
+                # Add game piece symbol
+                symbol = self._get_cell_symbol(cell_value, config)
+                if symbol:
+                    text_x = x + cell_size // 2
+                    text_y = y + cell_size // 2
+                    svg += f'\n  <text x="{text_x}" y="{text_y}" class="piece">{symbol}</text>'
+        
+        svg += '\n</svg>'
+        return svg
+
+    def _render_board_game_3d(self, obs) -> str:
+        """Render 3D board game observations (board games with player channels)"""
+        try:
+            # For Connect4: shape is (6, 7, 2) where last dim is [player1, player2]
+            # For Chess: shape is (8, 8, N) where N is number of piece/info channels
+            height, width = obs.shape[:2]
+            
+            # Convert multi-channel observation to single board representation
+            if self.type == "connect_four_v3":
+                # For Connect4, combine the two player channels
+                board = np.zeros((height, width), dtype=int)
+                board[obs[:, :, 0] == 1] = 1  # Player 1 pieces
+                board[obs[:, :, 1] == 1] = 2  # Player 2 pieces
+            elif self.type == "chess_v6":
+                # For Chess, this would need more complex piece detection
+                # For now, just use a simple representation
+                board = obs.sum(axis=2)  # Sum all channels
+                board = np.clip(board, 0, 2)  # Clip to 0-2 range
+            else:
+                # Generic approach - use first channel or sum
+                board = obs[:, :, 0] if obs.shape[2] > 0 else np.zeros((height, width))
+            
+            return self._render_grid_game(board)
+            
+        except Exception as e:
+            print(f"3D board rendering error: {e}")
+            return None
+
+    def _render_image_game(self, obs) -> str:
+        """Render image-based games like Atari"""
+        try:
+            if obs.dtype != np.uint8:
+                obs = (obs * 255).astype(np.uint8) if obs.max() <= 1.0 else obs.astype(np.uint8)
+            
+            # Convert to base64 PNG
+            from PIL import Image
+            import io
+            
+            img = Image.fromarray(obs)
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            img_b64 = base64.b64encode(buffer.getvalue()).decode()
+            
+            # Embed in SVG with scaling
+            height, width = obs.shape[:2]
+            scale_factor = min(400 / width, 300 / height)  # Max 400x300
+            scaled_width = int(width * scale_factor)
+            scaled_height = int(height * scale_factor)
+            
+            svg = f'''<svg width="{scaled_width}" height="{scaled_height}" xmlns="http://www.w3.org/2000/svg">
+  <image href="data:image/png;base64,{img_b64}" width="{scaled_width}" height="{scaled_height}"/>
+</svg>'''
+            return svg
+            
+        except Exception:
+            return None
+
+    def _render_dict_game(self, obs_dict) -> str:
+        """Render dictionary observations as text info"""
+        # For complex observations, show key info as text in SVG
+        info_text = []
+        for key, value in obs_dict.items():
+            if isinstance(value, (int, float, str)):
+                info_text.append(f"{key}: {value}")
+        
+        if not info_text:
+            return None
+            
+        svg = '''<svg width="300" height="100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="300" height="100" fill="#f0f0f0" stroke="#333"/>'''
+        
+        for i, text in enumerate(info_text[:4]):  # Max 4 lines
+            y = 20 + i * 20
+            svg += f'\n  <text x="10" y="{y}" font-size="14" fill="#000">{text}</text>'
+        
+        svg += '\n</svg>'
+        return svg
+
+    def _get_game_rendering_config(self):
+        """Get rendering config per game type"""
+        configs = {
+            "connect_four_v3": {
+                "colors": {0: "#ffffff", 1: "#ff4444", 2: "#ffdd44"},
+                "symbols": {0: "", 1: "●", 2: "●"}
+            },
+            "chess_v6": {
+                "colors": {0: "#f0d9b5", 1: "#b58863"},
+                "symbols": {0: "", 1: "♟", 2: "♝"}  # Simplified - would need piece detection
+            },
+            "tictactoe_v3": {
+                "colors": {0: "#ffffff", 1: "#ff4444", 2: "#4444ff"},
+                "symbols": {0: "", 1: "✗", 2: "○"}
+            }
+        }
+        return configs.get(self.type, {
+            "colors": {0: "#ffffff", 1: "#ff4444", 2: "#4444ff"},
+            "symbols": {0: "", 1: "●", 2: "●"}
+        })
+
+    def _get_cell_symbol(self, cell_value, config):
+        """Get symbol for a cell value"""
+        symbols = config.get("symbols", {})
+        return symbols.get(cell_value, str(cell_value) if cell_value != 0 else "")
 
     @classmethod
     def get_tool_definitions(cls) -> List[GameToolDefinition]:

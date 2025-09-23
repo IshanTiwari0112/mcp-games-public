@@ -59,7 +59,12 @@ class ConnectFour(PettingZooGame):
             # Add move-specific feedback
             action_value = action.payload.get("action", -1)
             result.new_state.metadata["move_result"] = f"Dropped piece in column {action_value}"
-                    
+            
+            # Add SVG rendering
+            svg_board = self._render_game_as_svg()
+            if svg_board:
+                result.new_state.metadata["svg_render"] = svg_board
+                
         return result
 
     @classmethod

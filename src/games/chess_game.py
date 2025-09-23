@@ -95,6 +95,11 @@ class ChessGame(Game):
                 self.state.status = GameStatus.COMPLETED
                 self.state.metadata["result"] = "Draw - Fivefold repetition!"
 
+            # Add SVG rendering
+            svg_render = self._render_game_as_svg()
+            if svg_render:
+                self.state.metadata["svg_render"] = svg_render
+
             return GameResult(success=True, new_state=self.state)
 
         except ValueError as e:
@@ -148,6 +153,79 @@ class ChessGame(Game):
         description += f"\n\n📋 Current Board:\n{self.state.state.get('board_ascii', 'No board')}"
         
         return description
+
+    def _render_game_as_svg(self) -> Optional[str]:
+        """Render chess board as SVG"""
+        try:
+            # Create a simple 8x8 chess board visualization
+            board_size = 320  # 40px per square
+            square_size = board_size // 8
+            
+            svg = f'''<svg width="{board_size}" height="{board_size}" xmlns="http://www.w3.org/2000/svg" style="border: 2px solid #333;">
+<defs>
+    <style>
+        .light {{ fill: #f0d9b5; }}
+        .dark {{ fill: #b58863; }}
+        .piece {{ font-size: 24px; text-anchor: middle; dominant-baseline: central; }}
+        .label {{ font-size: 12px; text-anchor: middle; dominant-baseline: central; }}
+    </style>
+</defs>'''
+
+            # Draw the chess board
+            for rank in range(8):  # 0-7 from top to bottom (rank 8 to 1)
+                for file in range(8):  # 0-7 from left to right (files a-h)
+                    x = file * square_size
+                    y = rank * square_size
+                    
+                    # Determine square color
+                    is_light = (rank + file) % 2 == 0
+                    color_class = "light" if is_light else "dark"
+                    
+                    svg += f'\n  <rect x="{x}" y="{y}" width="{square_size}" height="{square_size}" class="{color_class}"/>'
+                    
+                    # Add piece if present
+                    chess_square = chess.square(file, 7 - rank)  # Convert to chess.py coordinates
+                    piece = self.board.piece_at(chess_square)
+                    if piece:
+                        piece_symbol = self._get_piece_unicode(piece)
+                        text_x = x + square_size // 2
+                        text_y = y + square_size // 2
+                        svg += f'\n  <text x="{text_x}" y="{text_y}" class="piece">{piece_symbol}</text>'
+
+            # Add file labels (a-h) at the bottom
+            for file in range(8):
+                x = file * square_size + square_size // 2
+                y = board_size - 5
+                file_letter = chr(ord('a') + file)
+                svg += f'\n  <text x="{x}" y="{y}" class="label">{file_letter}</text>'
+
+            # Add rank labels (1-8) on the right
+            for rank in range(8):
+                x = board_size - 10
+                y = rank * square_size + square_size // 2
+                rank_number = 8 - rank
+                svg += f'\n  <text x="{x}" y="{y}" class="label">{rank_number}</text>'
+
+            svg += '\n</svg>'
+            return svg
+            
+        except Exception as e:
+            print(f"Chess rendering error: {e}")
+            return None
+
+    def _get_piece_unicode(self, piece) -> str:
+        """Get Unicode chess piece symbol"""
+        pieces = {
+            chess.PAWN: {'white': '♙', 'black': '♟'},
+            chess.ROOK: {'white': '♖', 'black': '♜'},
+            chess.KNIGHT: {'white': '♘', 'black': '♞'},
+            chess.BISHOP: {'white': '♗', 'black': '♝'},
+            chess.QUEEN: {'white': '♕', 'black': '♛'},
+            chess.KING: {'white': '♔', 'black': '♚'}
+        }
+        
+        color = 'white' if piece.color else 'black'
+        return pieces.get(piece.piece_type, {}).get(color, '?')
 
     def get_state(self) -> GameState:
         """Get current game state"""

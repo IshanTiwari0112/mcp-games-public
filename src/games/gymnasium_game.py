@@ -317,6 +317,222 @@ class GymnasiumGame(Game):
         """Cleanup on deletion"""
         self.close()
 
+    def _render_game_as_svg(self) -> Optional[str]:
+        """Universal game renderer for Gymnasium environments"""
+        try:
+            current_obs = self._get_current_observation()
+            if current_obs is None:
+                return None
+                
+            # Auto-detect observation type and render accordingly
+            if isinstance(current_obs, np.ndarray):
+                if len(current_obs.shape) == 2:
+                    return self._render_grid_game(current_obs)
+                elif len(current_obs.shape) == 3:
+                    return self._render_image_game(current_obs)
+                elif len(current_obs.shape) == 1:
+                    return self._render_vector_game(current_obs)
+            elif isinstance(current_obs, (int, float)):
+                return self._render_scalar_game(current_obs)
+            
+            # Fallback - no visual rendering available
+            return None
+            
+        except Exception as e:
+            print(f"Rendering error: {e}")
+            return None
+
+    def _get_current_observation(self):
+        """Get current observation for rendering"""
+        if self.observation is None:
+            return None
+            
+        # Handle serialized observations
+        if isinstance(self.observation, dict):
+            if self.observation.get("type") == "array":
+                return np.array(self.observation["data"]).reshape(self.observation["shape"])
+            elif self.observation.get("type") == "image":
+                img_data = base64.b64decode(self.observation["data"])
+                return np.frombuffer(img_data, dtype=np.uint8).reshape(self.observation["shape"])
+        
+        return self.observation
+
+    def _render_grid_game(self, obs) -> str:
+        """Render 2D grid games like FrozenLake"""
+        if len(obs.shape) != 2:
+            return None
+            
+        height, width = obs.shape
+        cell_size = 40
+        config = self._get_game_rendering_config()
+        
+        svg_width = width * cell_size
+        svg_height = height * cell_size
+        
+        svg = f'''<svg width="{svg_width}" height="{svg_height}" xmlns="http://www.w3.org/2000/svg" style="border: 2px solid #333;">
+<defs>
+    <style>
+        .cell {{ stroke: #333; stroke-width: 1; }}
+        .piece {{ font-size: 24px; text-anchor: middle; dominant-baseline: central; }}
+        .start {{ fill: {config.get("colors", {}).get("start", "#90EE90")}; }}
+        .goal {{ fill: {config.get("colors", {}).get("goal", "#FFD700")}; }}
+        .hole {{ fill: {config.get("colors", {}).get("hole", "#000000")}; }}
+        .ice {{ fill: {config.get("colors", {}).get("ice", "#87CEEB")}; }}
+        .player {{ fill: {config.get("colors", {}).get("player", "#FF6347")}; }}
+    </style>
+</defs>'''
+        
+        # Draw grid
+        for i in range(height):
+            for j in range(width):
+                x, y = j * cell_size, i * cell_size
+                cell_value = obs[i, j]
+                
+                # Determine cell type for FrozenLake-style games
+                cell_class = self._get_cell_class(cell_value, config)
+                
+                # Draw cell background
+                svg += f'\n  <rect x="{x}" y="{y}" width="{cell_size}" height="{cell_size}" class="cell {cell_class}"/>'
+                
+                # Add symbol
+                symbol = self._get_cell_symbol(cell_value, config)
+                if symbol:
+                    text_x = x + cell_size // 2
+                    text_y = y + cell_size // 2
+                    svg += f'\n  <text x="{text_x}" y="{text_y}" class="piece">{symbol}</text>'
+        
+        svg += '\n</svg>'
+        return svg
+
+    def _render_vector_game(self, obs) -> str:
+        """Render 1D vector observations as bars (CartPole, MountainCar)"""
+        config = self._get_game_rendering_config()
+        
+        svg = f'''<svg width="400" height="200" xmlns="http://www.w3.org/2000/svg" style="border: 2px solid #333;">
+<defs>
+    <style>
+        .bar {{ fill: #4CAF50; stroke: #333; stroke-width: 1; }}
+        .label {{ font-size: 12px; text-anchor: middle; }}
+        .title {{ font-size: 16px; text-anchor: middle; font-weight: bold; }}
+    </style>
+</defs>'''
+        
+        # Game title
+        svg += f'\n  <text x="200" y="20" class="title">{config.get("title", self.env_name)} State</text>'
+        
+        # Draw bars for each observation dimension
+        bar_width = 60
+        bar_spacing = 80
+        max_bar_height = 120
+        base_y = 160
+        
+        labels = config.get("labels", [f"Dim {i}" for i in range(len(obs))])
+        
+        for i, (value, label) in enumerate(zip(obs[:5], labels[:5])):  # Max 5 dimensions
+            x = 40 + i * bar_spacing
+            
+            # Normalize value to bar height (simple approach)
+            normalized_value = max(-1, min(1, value))  # Clamp between -1 and 1
+            bar_height = abs(normalized_value) * max_bar_height
+            bar_y = base_y - bar_height if normalized_value >= 0 else base_y
+            
+            # Draw bar
+            color = "#4CAF50" if normalized_value >= 0 else "#f44336"
+            svg += f'\n  <rect x="{x-bar_width//2}" y="{bar_y}" width="{bar_width}" height="{bar_height}" fill="{color}" stroke="#333"/>'
+            
+            # Draw label
+            svg += f'\n  <text x="{x}" y="{base_y + 20}" class="label">{label}</text>'
+            svg += f'\n  <text x="{x}" y="{base_y + 35}" class="label">{value:.2f}</text>'
+        
+        svg += '\n</svg>'
+        return svg
+
+    def _render_scalar_game(self, obs) -> str:
+        """Render scalar observations as gauge"""
+        config = self._get_game_rendering_config()
+        
+        svg = f'''<svg width="200" height="100" xmlns="http://www.w3.org/2000/svg" style="border: 2px solid #333;">
+<defs>
+    <style>
+        .gauge {{ fill: #4CAF50; stroke: #333; stroke-width: 2; }}
+        .value {{ font-size: 16px; text-anchor: middle; font-weight: bold; }}
+    </style>
+</defs>'''
+        
+        # Simple value display
+        svg += f'\n  <rect x="10" y="10" width="180" height="60" class="gauge"/>'
+        svg += f'\n  <text x="100" y="45" class="value">{config.get("title", "Value")}: {obs}</text>'
+        svg += '\n</svg>'
+        return svg
+
+    def _render_image_game(self, obs) -> str:
+        """Render image-based games (Atari, etc.)"""
+        try:
+            if obs.dtype != np.uint8:
+                obs = (obs * 255).astype(np.uint8) if obs.max() <= 1.0 else obs.astype(np.uint8)
+            
+            # Convert to base64 PNG
+            from PIL import Image
+            import io
+            
+            img = Image.fromarray(obs)
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+            img_b64 = base64.b64encode(buffer.getvalue()).decode()
+            
+            # Embed in SVG with scaling
+            height, width = obs.shape[:2]
+            scale_factor = min(400 / width, 300 / height)  # Max 400x300
+            scaled_width = int(width * scale_factor)
+            scaled_height = int(height * scale_factor)
+            
+            svg = f'''<svg width="{scaled_width}" height="{scaled_height}" xmlns="http://www.w3.org/2000/svg">
+  <image href="data:image/png;base64,{img_b64}" width="{scaled_width}" height="{scaled_height}"/>
+</svg>'''
+            return svg
+            
+        except Exception:
+            return None
+
+    def _get_game_rendering_config(self):
+        """Get rendering config per game type"""
+        configs = {
+            "FrozenLake-v1": {
+                "colors": {
+                    "ice": "#87CEEB", "hole": "#000000", "goal": "#FFD700", 
+                    "start": "#90EE90", "player": "#FF6347"
+                },
+                "symbols": {"ice": "❄", "hole": "🕳", "goal": "🎯", "player": "🧊"},
+                "title": "Frozen Lake"
+            },
+            "CartPole-v1": {
+                "labels": ["Cart Pos", "Cart Vel", "Pole Angle", "Pole Vel"],
+                "title": "CartPole"
+            },
+            "MountainCar-v0": {
+                "labels": ["Position", "Velocity"],
+                "title": "Mountain Car"
+            },
+            "Blackjack-v1": {
+                "title": "Blackjack"
+            }
+        }
+        return configs.get(self.env_name, {"title": self.env_name})
+
+    def _get_cell_class(self, cell_value, config):
+        """Get CSS class for cell based on game type"""
+        if self.env_name == "FrozenLake-v1":
+            # FrozenLake specific mapping
+            return "ice"  # Default, could be enhanced with actual position logic
+        return "ice"
+
+    def _get_cell_symbol(self, cell_value, config):
+        """Get symbol for a cell value"""
+        symbols = config.get("symbols", {})
+        if self.env_name == "FrozenLake-v1":
+            return symbols.get("ice", "❄")
+        return symbols.get(cell_value, str(cell_value) if cell_value != 0 else "")
+
     @classmethod
     def get_tool_definitions(cls) -> List[GameToolDefinition]:
         """Base tool definitions for Gymnasium games"""

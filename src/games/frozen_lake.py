@@ -67,6 +67,11 @@ class FrozenLake(GymnasiumGame):
             result.new_state.metadata["text_description"] = self._get_text_description(self.observation)
             result.new_state.metadata["position"] = self._get_position_from_obs(self.observation)
             
+            # Add SVG rendering
+            svg_render = self._render_game_as_svg()
+            if svg_render:
+                result.new_state.metadata["svg_render"] = svg_render
+            
             # Check if game ended
             if self.terminated:
                 if result.new_state.state.get("last_reward", 0) > 0:

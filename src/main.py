@@ -102,6 +102,16 @@ def get_game_frame(game_id: str) -> Optional[str]:
 
 def format_response_with_frame(message: str, game_id: str) -> str:
     """Format response to include visual frame if available"""
+    game = registry.get_game(game_id)
+    if not game:
+        return message
+    
+    # Try to get SVG rendering first
+    svg_render = game._render_game_as_svg()
+    if svg_render:
+        return f"{message}\n\n```svg\n{svg_render}\n```"
+    
+    # Fallback to old frame system
     frame = get_game_frame(game_id)
     if frame:
         return f"{message}\n\n🎮 Current Frame:\n![Game Frame]({frame})"
@@ -486,6 +496,12 @@ def frozen_lake_move_up(game_id: str, player: str) -> str:
     if result.success:
         meta = result.new_state.metadata
         response = f"Moved up! {meta.get('text_description', 'Position updated')}"
+        
+        # Add SVG rendering
+        svg_render = meta.get('svg_render')
+        if svg_render:
+            response += f"\n\n```svg\n{svg_render}\n```"
+            
         return response
     else:
         return f"Move failed: {result.error}"
@@ -504,6 +520,12 @@ def frozen_lake_move_down(game_id: str, player: str) -> str:
     if result.success:
         meta = result.new_state.metadata
         response = f"Moved down! {meta.get('text_description', 'Position updated')}"
+        
+        # Add SVG rendering
+        svg_render = meta.get('svg_render')
+        if svg_render:
+            response += f"\n\n```svg\n{svg_render}\n```"
+            
         return response
     else:
         return f"Move failed: {result.error}"
@@ -522,6 +544,12 @@ def frozen_lake_move_left(game_id: str, player: str) -> str:
     if result.success:
         meta = result.new_state.metadata
         response = f"Moved left! {meta.get('text_description', 'Position updated')}"
+        
+        # Add SVG rendering
+        svg_render = meta.get('svg_render')
+        if svg_render:
+            response += f"\n\n```svg\n{svg_render}\n```"
+            
         return response
     else:
         return f"Move failed: {result.error}"
@@ -540,6 +568,12 @@ def frozen_lake_move_right(game_id: str, player: str) -> str:
     if result.success:
         meta = result.new_state.metadata
         response = f"Moved right! {meta.get('text_description', 'Position updated')}"
+        
+        # Add SVG rendering
+        svg_render = meta.get('svg_render')
+        if svg_render:
+            response += f"\n\n```svg\n{svg_render}\n```"
+            
         return response
     else:
         return f"Move failed: {result.error}"
@@ -565,6 +599,11 @@ def frozen_lake_status(game_id: str) -> str:
     if state.status.value == "completed":
         status += f"\n{meta.get('result', 'Game ended')}"
 
+    # Add SVG rendering
+    svg_render = game._render_game_as_svg()
+    if svg_render:
+        status += f"\n\n```svg\n{svg_render}\n```"
+
     return status
 
 
@@ -582,6 +621,12 @@ def chess_move(game_id: str, move: str, player: str) -> str:
     if result.success:
         meta = result.new_state.metadata
         response = f"Move {move} played!\n\n{meta.get('game_description', 'Move completed')}"
+        
+        # Add SVG rendering
+        svg_render = meta.get('svg_render')
+        if svg_render:
+            response += f"\n\n```svg\n{svg_render}\n```"
+            
         return response
     else:
         return f"Move failed: {result.error}"
@@ -685,6 +730,12 @@ def chess_move_pz(game_id: str, action: int, player: str) -> str:
         move_result = meta.get('move_result')
         if move_result:
             response += f"\n{move_result}"
+        
+        # Add SVG rendering
+        svg_render = meta.get('svg_render')
+        if svg_render:
+            response += f"\n\n```svg\n{svg_render}\n```"
+            
         return response
     else:
         return f"Move failed: {result.error}"
@@ -714,6 +765,11 @@ def chess_status_pz(game_id: str) -> str:
         if actions:
             status += f"Available actions: {len(actions)} possible moves"
     
+    # Add SVG rendering
+    svg_render = game._render_game_as_svg()
+    if svg_render:
+        status += f"\n\n```svg\n{svg_render}\n```"
+    
     return status
 
 
@@ -734,6 +790,12 @@ def connect4_drop(game_id: str, column: int, player: str) -> str:
         move_result = meta.get('move_result')
         if move_result:
             response += f"\n{move_result}"
+        
+        # Add SVG rendering as artifact
+        svg_render = meta.get('svg_render')
+        if svg_render:
+            response += f"\n\n```svg\n{svg_render}\n```"
+            
         return response
     else:
         return f"Move failed: {result.error}"
@@ -762,6 +824,11 @@ def connect4_status(game_id: str) -> str:
         if actions:
             available_columns = [str(a['value']) for a in actions if a['type'] == 'discrete']
             status += f"Available columns: {', '.join(available_columns)}"
+    
+    # Add SVG rendering
+    svg_render = game._render_game_as_svg()
+    if svg_render:
+        status += f"\n\n```svg\n{svg_render}\n```"
     
     return status
 

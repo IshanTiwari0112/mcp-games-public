@@ -63,6 +63,11 @@ class PettingZooChess(PettingZooGame):
         if result.success:
             result.new_state.metadata["text_description"] = self._get_text_description()
             
+            # Add SVG rendering
+            svg_render = self._render_game_as_svg()
+            if svg_render:
+                result.new_state.metadata["svg_render"] = svg_render
+            
             # Add move-specific feedback
             last_rewards = result.new_state.state.get("last_rewards", {})
             if action.player in last_rewards:
